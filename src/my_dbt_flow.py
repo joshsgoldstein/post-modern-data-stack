@@ -451,7 +451,7 @@ class dbtFlow(FlowSpec):
             # generate a signature for the endpoint, using timestamp as a convention
             ENDPOINT_NAME = 'nep-{}-endpoint'.format(int(round(time.time() * 1000)))
             print("\n\n================\nEndpoint name is: {}\n\n".format(ENDPOINT_NAME))
-            print("Hello")
+
             # local temp file names
             model_name = "nep-model-{}/1".format(current.run_id)
             local_tar_name = 'model-{}.tar.gz'.format(current.run_id)
@@ -459,23 +459,29 @@ class dbtFlow(FlowSpec):
             nep_model = model_from_json(self.model['model'])
             nep_model.set_weights(self.model['model_weights'])
             # save model locally
-            print("Saving the model at path: " + model_name)
-            nep_model.save(filepath=model_name)
+            print("About to save locally in non TAR format")
+            # nep_model.save(filepath=model_name)
             # save model as .tar.gz
             with tarfile.open(local_tar_name, mode="w:gz") as _tar:
                 _tar.add(model_name, recursive=True)
             # remove local model
             shutil.rmtree(model_name.split('/')[0])
-            # save model to S3 using metaflow S3 Client
-            with open(local_tar_name, "rb") as in_file:
-                data = in_file.read()
-                with S3(run=self) as s3:
-                    url = s3.put(local_tar_name, data)
-                    print("Model saved at: {}".format(url))
-                    # save this path for downstream reference!
-                    self.model_s3_path = url
-                    # remove local compressed model
-                    os.remove(local_tar_name)
+
+            #  unpack the model I want to change this
+            # with tarfile.open(local_tar_name, mode="w:gz") as unpacked_tar:
+            #     unpacked_tar.unpacked_tar('./model-unpacked')
+            # # remove local model
+            # shutil.rmtree(model_name.split('/')[0])
+            # # save model to S3 using metaflow S3 Client
+            # with open(local_tar_name, "rb") as in_file:
+            #     data = in_file.read()
+            #     with S3(run=self) as s3:
+            #         url = s3.put(local_tar_name, data)
+            #         print("Model saved at: {}".format(url))
+            #         # save this path for downstream reference!
+            #         self.model_s3_path = url
+            #         # remove local compressed model
+            #         os.remove(local_tar_name)
             # init sagemaker TF model
             # model = TensorFlowModel(
             #    model_data=self.model_s3_path,
@@ -486,7 +492,7 @@ class dbtFlow(FlowSpec):
             #    initial_instance_count=1,
             #    instance_type=self.SAGEMAKER_INSTANCE,
             #    endpoint_name=ENDPOINT_NAME)
-            # run a small test against the endpoint
+            # # run a small test against the endpoint
             # input = {'instances': [[10, 20, 30]]}
             # # output is on the form {'predictions': [[0.0001, ..., 0.1283]]}
             # result = predictor.predict(input)
@@ -495,11 +501,7 @@ class dbtFlow(FlowSpec):
             # # print scores for first 10 prodcuts
             # print(result['predictions'][0][:10])
             # # delete the endpoint to avoid wasteful computing
-            # # NOTE: comment this if you want to keep it running
-            # # If deletion fails, make sure you delete the model in the console!
-            # print("Deleting endpoint now...")
-            # predictor.delete_endpoint()
-            # print("Endpoint deleted!")
+          
 
         self.next(self.end)
 
