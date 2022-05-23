@@ -31,7 +31,7 @@ except:
 
 class dbtFlow(FlowSpec):
 
-    #NOTE: data parameters
+    # NOTE: data parameters
     START_DATE = Parameter(
         name='start_date',
         help='Get data from this date, format yyyy-mm-dd',
@@ -43,16 +43,16 @@ class dbtFlow(FlowSpec):
         help='Get data until this date, format yyyy-mm-dd',
         default='2019-03-14'
     )
-    
-    #NOTE: training parameters
+
+    # NOTE: training parameters
     TRAINING_IMAGE = Parameter(
         name='training_image',
         help='AWS Docker Image URI for AWS Batch training',
         default='763104351884.dkr.ecr.us-west-2.amazonaws.com/tensorflow-training:2.8.0-gpu-py39-cu112-ubuntu20.04-e3'
     )
 
-    #NOTE: endpoint deployment parameters
-     # uri from: https://github.com/aws/deep-learning-containers/blob/master/available_images.md
+    # NOTE: endpoint deployment parameters
+    # uri from: https://github.com/aws/deep-learning-containers/blob/master/available_images.md
     SERVING_IMAGE = Parameter(
         name='serving_image',
         help='AWS Docker Image URI for SageMaker Inference',
@@ -86,7 +86,7 @@ class dbtFlow(FlowSpec):
         print("run id: %s" % current.run_id)
         print("username: %s" % current.username)
         if os.environ.get('EN_BATCH', '0') == '1':
-            print("ATTENTION: AWS BATCH ENABLED!") 
+            print("ATTENTION: AWS BATCH ENABLED!")
         print(os.getenv('AWS_DEFAULT_REGION'))
         # make sure we can use the training image as an env
         os.environ['TRAIN_STEP_IMAGE'] = self.TRAINING_IMAGE
@@ -108,7 +108,7 @@ class dbtFlow(FlowSpec):
             os.environ['SF_PWD'],
             os.environ['SF_ACCOUNT'],
             os.environ['SF_ROLE']
-            )
+        )
         snowflake_version = sf_client.get_version()
         print(snowflake_version)
         assert snowflake_version is not None
@@ -146,7 +146,8 @@ class dbtFlow(FlowSpec):
         for node in data["nodes"].keys():
             if node.split(".")[0] == "model":
                 cnt_doc = data["nodes"][node]["description"]
-                dbt_dag[node] = {'type': 'linear', 'box_next': True, 'box_ends': None, 'next': [], 'doc': cnt_doc} 
+                dbt_dag[node] = {'type': 'linear', 'box_next': True,
+                                 'box_ends': None, 'next': [], 'doc': cnt_doc}
 
         # fill the dependencies
         for node in data["nodes"].keys():
@@ -181,7 +182,7 @@ class dbtFlow(FlowSpec):
 
         is_cloud = bool(int(os.getenv('DBT_CLOUD')))
         if is_cloud:
-            # Run dbt in the cloud platform, using dbtCloudRunner as a 
+            # Run dbt in the cloud platform, using dbtCloudRunner as a
             # wrapper around the cloud APIs
             print("Running with dbt cloud")
             # we basically trigger a job and then wait in a loop
@@ -192,22 +193,26 @@ class dbtFlow(FlowSpec):
                 account_id=int(os.getenv('DBT_ACCOUNT_ID')),
                 project_id=int(os.getenv('DBT_PROJECT_ID')),
                 job_id=int(os.getenv('DBT_JOB_ID')),
-                cause='{}|{}|{}'.format(current.flow_name, current.run_id, current.username),
+                cause='{}|{}|{}'.format(
+                    current.flow_name, current.run_id, current.username),
                 dbt_cloud_api_key=os.getenv('DBT_API_KEY')
             )
             dbt_runner.run_job()
         else:
-            my_dir = os.path.dirname(os.path.realpath(__file__)) 
-            dbt_cmd = "dbt run --vars '{SF_SCHEMA: %s, SF_TABLE: %s}'"  % (os.getenv('SF_SCHEMA'), os.getenv('SF_TABLE'))
+            my_dir = os.path.dirname(os.path.realpath(__file__))
+            dbt_cmd = "dbt run --vars '{SF_SCHEMA: %s, SF_TABLE: %s}'" % (
+                os.getenv('SF_SCHEMA'), os.getenv('SF_TABLE'))
             # debug
             print("dir is {}, dbt command is: {}".format(my_dir, dbt_cmd))
             # run dbt from python
             process = subprocess.Popen([
-                'source {}; {}'.format(os.path.join(os.getenv('VIRTUAL_ENV'), 'bin/activate'), dbt_cmd)
-                ], cwd=os.path.join(my_dir, 'dbt/'), shell=True)
+                'source {}; {}'.format(os.path.join(
+                    os.getenv('VIRTUAL_ENV'), 'bin/activate'), dbt_cmd)
+            ], cwd=os.path.join(my_dir, 'dbt/'), shell=True)
             process.communicate()
             if process.returncode != 0:
-                raise Exception('dbt invocation returned exit code {}'.format(process.returncode))
+                raise Exception(
+                    'dbt invocation returned exit code {}'.format(process.returncode))
             # build a card
             current_path = str(Path(__file__).resolve().parent)
             self.dbt_dag = self.get_dag_from_manifest(current_path)
@@ -260,8 +265,10 @@ class dbtFlow(FlowSpec):
         print("Split index is {}".format(split_index))
         # version also the train / test split and print some quick number
         # NOTE: "INTERACTIONS" are JSON-ified string, so we need to load them
-        self.train_dataset = [json.loads(row['INTERACTIONS']) for row in self.dataset[:split_index]]
-        self.test_dataset = [json.loads(row['INTERACTIONS']) for row in self.dataset[split_index:]]        
+        self.train_dataset = [json.loads(row['INTERACTIONS'])
+                              for row in self.dataset[:split_index]]
+        self.test_dataset = [json.loads(row['INTERACTIONS'])
+                             for row in self.dataset[split_index:]]
         print("# {} events in the training set, # {} in test set".format(
             len(self.train_dataset),
             len(self.test_dataset)
@@ -278,13 +285,14 @@ class dbtFlow(FlowSpec):
         self.next(self.train_model)
 
     @environment(vars={
-                    'EN_BATCH': os.getenv('EN_BATCH'),
-                    'COMET_API_KEY': os.getenv('COMET_API_KEY')
-                })
+        'EN_BATCH': os.getenv('EN_BATCH'),
+        'COMET_API_KEY': os.getenv('COMET_API_KEY')
+    })
     # TODO: os.getenv may not work when we resume instead of starting from scracth
     @enable_decorator(batch(gpu=1, memory=80000, image=os.getenv('TRAIN_STEP_IMAGE')),
                       flag=os.getenv('EN_BATCH'))
-    @pip(libraries={'reclist': '0.2.3', 'comet-ml': '3.26.0', 'numpy': '1.19.0'}) # numpy is there to avoid TF complaining
+    # numpy is there to avoid TF complaining
+    @pip(libraries={'reclist': '0.2.3', 'comet-ml': '3.26.0', 'numpy': '1.19.0'})
     @step
     def train_model(self):
         """
@@ -294,10 +302,10 @@ class dbtFlow(FlowSpec):
         from comet_ml import Experiment
         from model.lstm_model import get_model
         import numpy as np
-        from tensorflow.keras.optimizers import Adam # pylint: disable=import-error
-        from tensorflow.keras.callbacks import EarlyStopping # pylint: disable=import-error 
-        from tensorflow.keras.preprocessing.text import Tokenizer # pylint: disable=import-error
-        from tensorflow.keras.preprocessing.sequence import pad_sequences # pylint: disable=import-error
+        from tensorflow.keras.optimizers import Adam  # pylint: disable=import-error
+        from tensorflow.keras.callbacks import EarlyStopping  # pylint: disable=import-error
+        from tensorflow.keras.preprocessing.text import Tokenizer  # pylint: disable=import-error
+        from tensorflow.keras.preprocessing.sequence import pad_sequences  # pylint: disable=import-error
 
         # TODO: pick a sensible EXP name!!!
         self.COMET_EXP_NAME = 'my_lstm_recs'
@@ -334,10 +342,11 @@ class dbtFlow(FlowSpec):
         # get N-1 items as seed
         x_train = [s[:-1] for s in train_sessions_token]
         # pad to MAX_LEN
-        x_train = np.array(pad_sequences(x_train, maxlen=self.hypers['MAX_LEN']))
+        x_train = np.array(pad_sequences(
+            x_train, maxlen=self.hypers['MAX_LEN']))
         # get last item as label;
         # TODO: Decrementing index here because 0 is reserved for masking; Find a better way around this.
-        y_train = np.array([ s[-1]-1 for s in train_sessions_token])
+        y_train = np.array([s[-1]-1 for s in train_sessions_token])
         print("NUMBER OF SESSIONS : {}".format(x_train.shape[0]))
         print('First 3 x:', x_train[:3])
         print('First 3 y:', y_train[:3])
@@ -392,7 +401,7 @@ class dbtFlow(FlowSpec):
             if not isinstance(result['test_result'], float):
                 continue
             row = [
-                result['test_name'],  
+                result['test_name'],
                 result['description'],
                 result['test_result']
             ]
@@ -404,7 +413,8 @@ class dbtFlow(FlowSpec):
     @environment(vars={'EN_BATCH': os.getenv('EN_BATCH')})
     @enable_decorator(batch(gpu=1, memory=80000, image=os.getenv('TRAIN_STEP_IMAGE')),
                       flag=os.getenv('EN_BATCH'))
-    @pip(libraries={'reclist': '0.2.3', 'numpy': '1.19.0'}) # numpy is there to avoid TF complaining
+    # numpy is there to avoid TF complaining
+    @pip(libraries={'reclist': '0.2.3', 'numpy': '1.19.0'})
     @card(type='blank', id='recCard')
     @step
     def test_model(self):
@@ -415,11 +425,12 @@ class dbtFlow(FlowSpec):
         from model.lstm_model import LSTMRecModel
         from model.my_reclist import MyMetaflowRecList
         rec_model = LSTMRecModel(model_dict=self.model)
-        y_preds = rec_model.predict(prediction_input=self.session_dataset.x_test)
+        y_preds = rec_model.predict(
+            prediction_input=self.session_dataset.x_test)
         rec_list = MyMetaflowRecList(
-          model=rec_model,
-          dataset=self.session_dataset,
-          y_preds=y_preds
+            model=rec_model,
+            dataset=self.session_dataset,
+            y_preds=y_preds
         )
         rec_list(verbose=True)
         self.rec_results = rec_list.test_results
@@ -427,7 +438,7 @@ class dbtFlow(FlowSpec):
         _table = self.build_table_from_rectests(self.rec_results)
         current.card['recCard'].append(_table)
         self.next(self.deploy_model)
-        
+
     @step
     def deploy_model(self):
         """
@@ -440,7 +451,7 @@ class dbtFlow(FlowSpec):
         """
         import shutil
         import tarfile
-        from tensorflow.keras.models import model_from_json # pylint: disable=import-error
+        from tensorflow.keras.models import model_from_json  # pylint: disable=import-error
 
         # skip the deployment if not needed
         if not bool(int(os.getenv('SAGEMAKER_DEPLOY'))):
@@ -448,8 +459,10 @@ class dbtFlow(FlowSpec):
         else:
             from sagemaker.tensorflow import TensorFlowModel
             # generate a signature for the endpoint, using timestamp as a convention
-            ENDPOINT_NAME = 'nep-{}-endpoint'.format(int(round(time.time() * 1000)))
-            print("\n\n================\nEndpoint name is: {}\n\n".format(ENDPOINT_NAME))
+            ENDPOINT_NAME = 'nep-{}-endpoint'.format(
+                int(round(time.time() * 1000)))
+            print("\n\n================\nEndpoint name is: {}\n\n".format(
+                ENDPOINT_NAME))
 
             # local temp file names
             model_name = "nep-model-{}/1".format(current.run_id)
@@ -460,44 +473,66 @@ class dbtFlow(FlowSpec):
             # save model locally
             nep_model.save(filepath=model_name)
             # save model as .tar.gz
-            with tarfile.open(local_tar_name, mode="w:gz") as _tar:
-                _tar.add(model_name, recursive=True)
-            # remove local model
-            shutil.rmtree(model_name.split('/')[0])
+            # with tarfile.open(local_tar_name, mode="w:gz") as _tar:
+            #     _tar.add(model_name, recursive=True)
+            # # remove local model
+            # shutil.rmtree(model_name.split('/')[0])
             # save model to S3 using metaflow S3 Client
-            with open(local_tar_name, "rb") as in_file:
-                data = in_file.read()
-                with S3(run=self) as s3:
-                    url = s3.put(local_tar_name, data)
-                    print("Model saved at: {}".format(url))
-                    # save this path for downstream reference!
-                    self.model_s3_path = url
-                    # remove local compressed model
-                    os.remove(local_tar_name)
-            # init sagemaker TF model
-            model = TensorFlowModel(
-               model_data=self.model_s3_path,
-               image_uri=self.SERVING_IMAGE,
-               role=self.IAM_SAGEMAKER_ROLE)
-            # deploy sagemaker TF model
-            predictor = model.deploy(
-               initial_instance_count=1,
-               instance_type=self.SAGEMAKER_INSTANCE,
-               endpoint_name=ENDPOINT_NAME)
-            # run a small test against the endpoint
-            input = {'instances': [[10, 20, 30]]}
-            # output is on the form {'predictions': [[0.0001, ..., 0.1283]]}
-            result = predictor.predict(input)
-            assert result['predictions'][0][0] > 0
-            assert len(result['predictions'][0]) == self.model['model_config']['vocab_size']
-            # print scores for first 10 prodcuts
-            print(result['predictions'][0][:10])
-            # delete the endpoint to avoid wasteful computing
-            # NOTE: comment this if you want to keep it running
-            # If deletion fails, make sure you delete the model in the console!
-            print("Deleting endpoint now...")
-            predictor.delete_endpoint()
-            print("Endpoint deleted!")
+            # with open(local_tar_name, "rb") as in_file:
+            #     data = in_file.read()
+            #     with S3(run=self) as s3:
+            #         print("This is the local tar name: " + local_tar_name)
+            #         url = s3.put(local_tar_name, data)
+            #         print("Model saved at: {}".format(url))
+            #         # save this path for downstream reference!
+            #         self.model_s3_path = url
+            #         # remove local compressed model
+            #         os.remove(local_tar_name)
+
+            with S3(run=self) as s3:
+                direct_walk = "nep-model-{}/".format(current.run_id)
+                print("This is the filepath being walked" + direct_walk)
+                for root, dirs, files in os.walk(direct_walk):
+                    # dirs[:] = [d for d in dirs if not d.startswith('.')]
+                    # for dir in dirs:
+                    #     print(os.path.join(root, dir))
+                    for file in files:
+                        print("Looking at a file")
+                        file_path = os.path.join(root, file)
+                        print(file_path)
+                        f = open(file_path, 'rb')
+                        url = s3.put('model-store',f)
+                        f.close()
+                        print("File saved at: {}".format(url))
+
+        # save this path for downstream reference!
+        # self.model_s3_path = url
+        # remove local compressed model
+        # os.remove(local_tar_name)
+            # # init sagemaker TF model
+            # model = TensorFlowModel(
+            #    model_data=self.model_s3_path,
+            #    image_uri=self.SERVING_IMAGE,
+            #    role=self.IAM_SAGEMAKER_ROLE)
+            # # deploy sagemaker TF model
+            # predictor = model.deploy(
+            #    initial_instance_count=1,
+            #    instance_type=self.SAGEMAKER_INSTANCE,
+            #    endpoint_name=ENDPOINT_NAME)
+            # # run a small test against the endpoint
+            # input = {'instances': [[10, 20, 30]]}
+            # # output is on the form {'predictions': [[0.0001, ..., 0.1283]]}
+            # result = predictor.predict(input)
+            # assert result['predictions'][0][0] > 0
+            # assert len(result['predictions'][0]) == self.model['model_config']['vocab_size']
+            # # print scores for first 10 prodcuts
+            # print(result['predictions'][0][:10])
+            # # delete the endpoint to avoid wasteful computing
+            # # NOTE: comment this if you want to keep it running
+            # # If deletion fails, make sure you delete the model in the console!
+            # print("Deleting endpoint now...")
+            # predictor.delete_endpoint()
+            # print("Endpoint deleted!")
 
         self.next(self.end)
 
