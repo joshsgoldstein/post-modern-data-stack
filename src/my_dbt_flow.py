@@ -103,6 +103,7 @@ class dbtFlow(FlowSpec):
             assert int(os.getenv('DBT_JOB_ID'))
             assert os.getenv('DBT_API_KEY')
         from clients.snowflake_client import SnowflakeClient
+        print("Snowflake Account: " + os.environ['SF_ACCOUNT'])
         sf_client = SnowflakeClient(
             os.environ['SF_USER'],
             os.environ['SF_PWD'],
@@ -229,6 +230,7 @@ class dbtFlow(FlowSpec):
         import json
         from model.my_reclist import SessionDataset
         from clients.snowflake_client import SnowflakeClient
+        print("Account Name for Snowflake: " + os.environ['SF_ACCOUNT'])
         sf_client = SnowflakeClient(
             os.environ['SF_USER'],
             os.environ['SF_PWD'],
@@ -493,15 +495,16 @@ class dbtFlow(FlowSpec):
                 direct_walk = "nep-model-{}/".format(current.run_id)
                 print("This is the filepath being walked" + direct_walk)
                 for root, dirs, files in os.walk(direct_walk):
-                    # dirs[:] = [d for d in dirs if not d.startswith('.')]
-                    # for dir in dirs:
-                    #     print(os.path.join(root, dir))
+                    dirs[:] = [d for d in dirs if not d.startswith('.')]
+                    for dir in dirs:
+                        print(os.path.join(root, dir))
                     for file in files:
                         print("Looking at a file")
                         file_path = os.path.join(root, file)
                         print(file_path)
                         f = open(file_path, 'rb')
-                        url = s3.put('model-store',f)
+                        file_for_upload = f.read()
+                        url = s3.put(model_name,file_for_upload)
                         f.close()
                         print("File saved at: {}".format(url))
 
