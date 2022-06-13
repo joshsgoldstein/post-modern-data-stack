@@ -488,7 +488,7 @@ class dbtFlow(FlowSpec):
             #         self.model_s3_path = url
             #         # remove local compressed model
             #         os.remove(local_tar_name)
-
+            print("The model Name: " + model_name)
             with S3(run=self) as s3:
                 direct_walk = "nep-model-{}/".format(current.run_id)
                 print("This is the filepath being walked" + direct_walk)
@@ -499,40 +499,112 @@ class dbtFlow(FlowSpec):
                     for file in files:
                         print("Looking at a file")
                         file_path = os.path.join(root, file)
-                        print(file_path)
+                        print(root)
                         f = open(file_path, 'rb')
-                        url = s3.put('model-store',f)
+                        file_for_upload = f.read()
+                        url = s3.put(file_path,file_for_upload)
+                        if "saved_model.pb" in file:
+                            seldon_model_url = "/".join(url.split('/')[:-2]) + "/"
+                            print(seldon_model_url)
                         f.close()
                         print("File saved at: {}".format(url))
+            
 
-        # save this path for downstream reference!
-        # self.model_s3_path = url
-        # remove local compressed model
-        # os.remove(local_tar_name)
-            # # init sagemaker TF model
-            # model = TensorFlowModel(
-            #    model_data=self.model_s3_path,
-            #    image_uri=self.SERVING_IMAGE,
-            #    role=self.IAM_SAGEMAKER_ROLE)
-            # # deploy sagemaker TF model
-            # predictor = model.deploy(
-            #    initial_instance_count=1,
-            #    instance_type=self.SAGEMAKER_INSTANCE,
-            #    endpoint_name=ENDPOINT_NAME)
-            # # run a small test against the endpoint
-            # input = {'instances': [[10, 20, 30]]}
-            # # output is on the form {'predictions': [[0.0001, ..., 0.1283]]}
-            # result = predictor.predict(input)
-            # assert result['predictions'][0][0] > 0
-            # assert len(result['predictions'][0]) == self.model['model_config']['vocab_size']
-            # # print scores for first 10 prodcuts
-            # print(result['predictions'][0][:10])
-            # # delete the endpoint to avoid wasteful computing
-            # # NOTE: comment this if you want to keep it running
-            # # If deletion fails, make sure you delete the model in the console!
-            # print("Deleting endpoint now...")
-            # predictor.delete_endpoint()
-            # print("Endpoint deleted!")
+            # s3://whythemetaflownoworkie/data/S3DemoFlow/1655151344246735/nep-model-1655150227427870/1/saved_model.pb
+            # SELDON CODE
+            from seldon_deploy_sdk import Configuration, ApiClient, SeldonDeploymentsApi, OutlierDetectorApi, DriftDetectorApi
+            from seldon_deploy_sdk.auth import OIDCAuthenticator
+            SD_IP = "34.73.238.47"
+
+            # Configure Auth
+            config = Configuration()
+            config.host = f"http://{SD_IP}/seldon-deploy/api/v1alpha1"
+            config.oidc_client_id = "sd-api"
+            config.oidc_server = f"http://{SD_IP}/auth/realms/deploy-realm"
+            config.oidc_client_secret = "sd-api-secret"
+            config.auth_method = 'client_credentials'
+            auth = OIDCAuthenticator(config)
+            config.id_token = auth.authenticate()
+            seldon_api_client = ApiClient(configuration=config, authenticator=auth)
+            
+            # Create Deployment Config
+            YOUR_NAME = "regular"
+            MODEL_NAME = "lr"
+            DEPLOYMENT_NAME = f"{YOUR_NAME}-{MODEL_NAME}"
+            MODEL_LOCATION = seldon_model_url
+            NAMESPACE = "seldon"
+            PREPACKAGED_SERVER = "TENSORFLOW_SERVER"
+            CPU_REQUESTS = "0.1"
+            MEMORY_REQUESTS = "1Gi"
+            CPU_LIMITS = "0.1"
+            MEMORY_LIMITS = "1Gi"
+
+            mldeployment = {
+                "kind": "SeldonDeployment",
+                "metadata": {
+                    "name": DEPLOYMENT_NAME,
+                    "namespace": NAMESPACE,
+                    "labels": {
+                        "fluentd": "true"
+                    }
+                },
+                "apiVersion": "machinelearning.seldon.io/v1alpha2",
+                "spec": {
+                    "name": DEPLOYMENT_NAME,
+                    "annotations": {
+                        "seldon.io/engine-seldon-log-messages-externally": "true"
+                    },
+                    "protocol": "seldon",
+                    "transport": "rest",
+                    "predictors": [
+                        {
+                            "componentSpecs": [
+                                {
+                                    "spec": {
+                                        "containers": [
+                                            {
+                                                "name": f"{DEPLOYMENT_NAME}-container",
+                                                "resources": {
+                                                    "requests": {
+                                                        "cpu": CPU_REQUESTS,
+                                                        "memory": MEMORY_REQUESTS
+                                                    },
+                                                    "limits": {
+                                                        "cpu": CPU_LIMITS,
+                                                        "memory": MEMORY_LIMITS
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    }
+                                }
+                            ],
+                            "name": "default",
+                            "replicas": 1,
+                            "traffic": 100,
+                            "graph": {
+                                "implementation": PREPACKAGED_SERVER,
+                                "modelUri": MODEL_LOCATION,
+                                "name": f"{DEPLOYMENT_NAME}-container",
+                                "endpoint": {
+                                    "type": "REST"
+                                },
+                                "parameters": [],
+                                "children": [],
+                                "logger": {
+                                    "mode": "all"
+                                }
+                            }
+                        }
+                    ]
+                },
+                "status": {}
+            }
+
+            # Deploy to Seldon Deploy
+
+            deployment_api = SeldonDeploymentsApi(seldon_api_client)
+            deployment_api.create_seldon_deployment(namespace=NAMESPACE, mldeployment=mldeployment) 
 
         self.next(self.end)
 
