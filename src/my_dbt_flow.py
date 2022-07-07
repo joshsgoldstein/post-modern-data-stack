@@ -512,9 +512,10 @@ class dbtFlow(FlowSpec):
 
             # s3://whythemetaflownoworkie/data/S3DemoFlow/1655151344246735/nep-model-1655150227427870/1/saved_model.pb
             # SELDON CODE
+            print("Starting the Deploy to Seldon")
             from seldon_deploy_sdk import Configuration, ApiClient, SeldonDeploymentsApi, OutlierDetectorApi, DriftDetectorApi
             from seldon_deploy_sdk.auth import OIDCAuthenticator
-            SD_IP = "34.73.238.47"
+            SD_IP = "35.204.79.113"
 
             # Configure Auth
             config = Configuration()
@@ -532,7 +533,7 @@ class dbtFlow(FlowSpec):
             MODEL_NAME = "lr"
             DEPLOYMENT_NAME = f"{YOUR_NAME}-{MODEL_NAME}"
             MODEL_LOCATION = seldon_model_url
-            NAMESPACE = "seldon"
+            NAMESPACE = "seldon-demos"
             PREPACKAGED_SERVER = "TENSORFLOW_SERVER"
             CPU_REQUESTS = "0.1"
             MEMORY_REQUESTS = "1Gi"
@@ -554,7 +555,7 @@ class dbtFlow(FlowSpec):
                     "annotations": {
                         "seldon.io/engine-seldon-log-messages-externally": "true"
                     },
-                    "protocol": "seldon",
+                    "protocol": "tensorflow",
                     "transport": "rest",
                     "predictors": [
                         {
@@ -586,6 +587,7 @@ class dbtFlow(FlowSpec):
                                 "implementation": PREPACKAGED_SERVER,
                                 "modelUri": MODEL_LOCATION,
                                 "name": f"{DEPLOYMENT_NAME}-container",
+                                "envSecretRefName": "cloud-bucket",
                                 "endpoint": {
                                     "type": "REST"
                                 },
