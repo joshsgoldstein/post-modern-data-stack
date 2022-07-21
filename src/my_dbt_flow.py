@@ -513,9 +513,10 @@ class dbtFlow(FlowSpec):
             # s3://whythemetaflownoworkie/data/S3DemoFlow/1655151344246735/nep-model-1655150227427870/1/saved_model.pb
             # SELDON CODE
             print("Starting the Deploy to Seldon")
-            from seldon_deploy_sdk import Configuration, ApiClient, SeldonDeploymentsApi, OutlierDetectorApi, DriftDetectorApi
+            from seldon_deploy_sdk import Configuration, ApiClient, SeldonDeploymentsApi, PredictApi
             from seldon_deploy_sdk.auth import OIDCAuthenticator
-            SD_IP = "35.204.79.113"
+            from seldon_deploy_sdk.rest import ApiException
+            SD_IP = "34.74.242.235"
 
             # Configure Auth
             config = Configuration()
@@ -529,8 +530,8 @@ class dbtFlow(FlowSpec):
             seldon_api_client = ApiClient(configuration=config, authenticator=auth)
             
             # Create Deployment Config
-            YOUR_NAME = "regular"
-            MODEL_NAME = "lr"
+            YOUR_NAME = "test"
+            MODEL_NAME = "nep-model-{}".format(current.run_id)
             DEPLOYMENT_NAME = f"{YOUR_NAME}-{MODEL_NAME}"
             MODEL_LOCATION = seldon_model_url
             NAMESPACE = "seldon-demos"
@@ -587,7 +588,7 @@ class dbtFlow(FlowSpec):
                                 "implementation": PREPACKAGED_SERVER,
                                 "modelUri": MODEL_LOCATION,
                                 "name": f"{DEPLOYMENT_NAME}-container",
-                                "envSecretRefName": "cloud-bucket",
+                                "envSecretRefName": "metaflow-test-bucket",
                                 "endpoint": {
                                     "type": "REST"
                                 },
@@ -604,12 +605,42 @@ class dbtFlow(FlowSpec):
             }
 
             # Deploy to Seldon Deploy
+            try:
+                deployment_api = SeldonDeploymentsApi(seldon_api_client)
+                api_response = deployment_api.create_seldon_deployment(namespace=NAMESPACE, mldeployment=mldeployment) 
+                # print("Deployment Status: " + api_response.status.state)
+            except ApiException as e:
+                print("Exception when calling SeldonDeploymentsApi-> create seldon deployment: %s\n" % e)
+                self.next(self.end)
+            
+            
 
-            deployment_api = SeldonDeploymentsApi(seldon_api_client)
-            deployment_api.create_seldon_deployment(namespace=NAMESPACE, mldeployment=mldeployment) 
+
+
+            # Wait for Deployment to Become Available
+            print("Waiting for Seldon Deployment to become available")
+            deployment_status = 'Not Ready'
+            while deployment_status != "Available":
+                try:
+                    api_response = deployment_api.read_seldon_deployment(DEPLOYMENT_NAME, NAMESPACE)
+                    print(api_response.status.state)
+                    deployment_status = api_response.status.state
+                except ApiException as e:
+                    print("Exception when calling SeldonDeploymentsApi->read_seldon_deployment: %s\n" % e)
+                    self.next(self.end)
+            
+            # Send Test Prediction
+            print("Testing a Prediction")
+            prediction = {'instances': [[10, 20, 30]]}
+            predict_api = PredictApi(seldon_api_client)
+            try:
+                api_response = predict_api.predict_seldon_deployment(DEPLOYMENT_NAME, NAMESPACE, prediction)
+                print(api_response)
+            except ApiException as e:
+                print("Exception when calling PredictApi->predict_seldon_deployment: %s\n" % e)
+                self.next(self.end)
 
         self.next(self.end)
-
     @step
     def end(self):
         """
