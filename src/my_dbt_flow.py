@@ -623,7 +623,7 @@ class dbtFlow(FlowSpec):
             while deployment_status != "Available":
                 try:
                     api_response = deployment_api.read_seldon_deployment(DEPLOYMENT_NAME, NAMESPACE)
-                    print(api_response.status.state)
+                    print(f"Deployment Status: {api_response.status.state}")
                     deployment_status = api_response.status.state
                 except ApiException as e:
                     print("Exception when calling SeldonDeploymentsApi->read_seldon_deployment: %s\n" % e)
